@@ -184,6 +184,29 @@ func TestSkipsFencedCodeBlock(t *testing.T) {
 	}
 }
 
+func TestWithCategory(t *testing.T) {
+	t.Run("whitelist", func(t *testing.T) {
+		// Only Ellipsis active; dashes and quotes should pass through
+		ext := typewriter.New(typewriter.WithCategory(typewriter.Ellipsis))
+		got := render(t, ext, "wait…")
+		if got != "<p>wait...</p>\n" {
+			t.Errorf("ellipsis: got %q", got)
+		}
+		got = render(t, ext, "em—dash")
+		if got != "<p>em—dash</p>\n" {
+			t.Errorf("dash should pass through: got %q", got)
+		}
+	})
+	t.Run("all", func(t *testing.T) {
+		// CategoryAll includes Spaces
+		ext := typewriter.New(typewriter.WithCategory(typewriter.CategoryAll))
+		got := render(t, ext, "a b") // NBSP between a and b
+		if got != "<p>a b</p>\n" {
+			t.Errorf("spaces: got %q", got)
+		}
+	})
+}
+
 func TestWithoutCategory(t *testing.T) {
 	ext := typewriter.New(typewriter.WithoutCategory(typewriter.Math))
 	// × should pass through unchanged

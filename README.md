@@ -38,7 +38,29 @@ All categories are active by default.
 
 ## Configuration
 
-### Disable a category
+### Enable only specific categories
+
+`WithCategory` sets the active categories to exactly what you pass, replacing the
+default. Use it when you want a strict whitelist:
+
+```go
+// Only convert dashes and ellipses; everything else passes through
+md := goldmark.New(goldmark.WithExtensions(
+    typewriter.New(typewriter.WithCategory(typewriter.Dashes | typewriter.Ellipsis)),
+))
+```
+
+### Enable all categories including spaces
+
+```go
+md := goldmark.New(goldmark.WithExtensions(
+    typewriter.New(typewriter.WithCategory(typewriter.CategoryAll)),
+))
+```
+
+### Disable specific categories
+
+`WithoutCategory` removes categories from the active set (default: `Default`):
 
 ```go
 md := goldmark.New(goldmark.WithExtensions(
@@ -52,10 +74,31 @@ Multiple categories can be combined with `|`:
 typewriter.WithoutCategory(typewriter.Math | typewriter.Bullets)
 ```
 
+The two options compose left-to-right — set a base, then subtract:
+
+```go
+// Everything including Spaces, except Math
+typewriter.New(
+    typewriter.WithCategory(typewriter.CategoryAll),
+    typewriter.WithoutCategory(typewriter.Math),
+)
+```
+
 ### Enable space normalisation
 
-Non-breaking and other Unicode spaces are off by default because they can carry
-line-breaking intent from the author.
+Every other category is a pure representation change: `"Hello"` and `"Hello"` mean the
+same thing; `—` and `---` mean the same thing. The converted document is semantically
+identical to the original.
+
+Non-breaking space (U+00A0) is different. It is not a stylistic variant of a regular
+space — it carries an instruction: *do not break the line here*. An author who writes
+`100 km` with a non-breaking space between the number and unit is telling the renderer
+to keep them together. Converting it to a plain space silently removes that intent and
+the text may reflow differently. The other Unicode spaces (thin, en, em, figure) also
+encode specific widths that a plain space does not.
+
+Because space conversion changes what the document *does* rather than how it is encoded,
+it is opt-in:
 
 ```go
 md := goldmark.New(goldmark.WithExtensions(

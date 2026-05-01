@@ -57,6 +57,9 @@ const (
 	// Default is all categories except Spaces, which can change document
 	// semantics and is therefore opt-in via WithSpaces.
 	Default = Quotes | Dashes | Ellipsis | Fractions | Symbols | Math | Ligatures | Bullets
+
+	// CategoryAll is every defined category, including Spaces.
+	CategoryAll = Default | Spaces
 )
 
 // buildConfig accumulates option values before pairs are compiled.
@@ -68,7 +71,16 @@ type buildConfig struct {
 // Option configures the extension.
 type Option func(*buildConfig)
 
-// WithoutCategory disables one or more default categories.
+// WithCategory sets the active categories to exactly c, replacing the default.
+// Use this to enable only specific categories:
+//
+//	typewriter.WithCategory(typewriter.Quotes | typewriter.Dashes)
+//	typewriter.WithCategory(typewriter.CategoryAll)
+func WithCategory(c Category) Option {
+	return func(cfg *buildConfig) { cfg.categories = c }
+}
+
+// WithoutCategory removes one or more categories from the active set.
 //
 //	typewriter.WithoutCategory(typewriter.Math | typewriter.Bullets)
 func WithoutCategory(c Category) Option {
