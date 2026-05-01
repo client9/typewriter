@@ -1,15 +1,14 @@
-package typewriter
+package typewriterext
 
 import (
-	"strings"
-
+	"github.com/client9/typewriter"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 )
 
 type transformer struct {
-	r *strings.Replacer
+	r *typewriter.Replacer
 }
 
 func (t *transformer) Transform(doc *ast.Document, reader text.Reader, pc parser.Context) {
@@ -24,8 +23,7 @@ func (t *transformer) Transform(doc *ast.Document, reader text.Reader, pc parser
 			// The HTML renderer reads code content directly from source[]
 			// via segment.Value(source) and expects ast.Text children, not
 			// ast.String. Replacing nodes here would panic the renderer.
-			// Use StripBytes on the raw source before parsing to normalise
-			// code content.
+			// Use typewriter.ReplaceBytes on raw source to normalise code content.
 			return ast.WalkSkipChildren, nil
 		case ast.KindText:
 			replaceText(n.(*ast.Text), source, t.r)
@@ -34,7 +32,7 @@ func (t *transformer) Transform(doc *ast.Document, reader text.Reader, pc parser
 	})
 }
 
-func replaceText(node *ast.Text, source []byte, r *strings.Replacer) {
+func replaceText(node *ast.Text, source []byte, r *typewriter.Replacer) {
 	src := string(node.Segment.Value(source))
 	result := r.Replace(src)
 	if result == src {

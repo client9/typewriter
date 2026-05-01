@@ -1,44 +1,27 @@
-// Package typewriter provides a goldmark extension that converts typographic
-// ("smart") characters back to their ASCII typewriter equivalents.
+// Package typewriter converts typographic ("smart") Unicode characters back to
+// their plain ASCII typewriter equivalents.
 //
-// It is the complement of goldmark's built-in typographer extension and tools
-// like Smarty Pants. Content inside code spans and fenced blocks is left
-// untouched by the extension form; use StripBytes to normalise everything
-// including code content.
+// It is the complement of goldmark's typographer extension and tools like
+// Smarty Pants. Use it as a preprocessor before a smart-typography pass to
+// normalise mixed input to a consistent ASCII baseline.
 //
 // All categories are active by default:
 //
-//	md := goldmark.New(goldmark.WithExtensions(typewriter.New()))
+//	clean := typewriter.ReplaceBytes(src)
+//	clean := typewriter.Replace(s)
 //
-// Opt out of specific categories:
+// Configure with options:
 //
-//	md := goldmark.New(goldmark.WithExtensions(
-//	    typewriter.New(typewriter.WithoutCategory(typewriter.Math)),
-//	))
-//
-// Enable only specific categories:
-//
-//	md := goldmark.New(goldmark.WithExtensions(
-//	    typewriter.New(typewriter.WithCategory(typewriter.Dashes | typewriter.Ellipsis)),
-//	))
-//
-// Override or remove individual conversions:
-//
-//	md := goldmark.New(goldmark.WithExtensions(
-//	    typewriter.New(
-//	        typewriter.WithMapping("—", "--"),  // prefer double-dash for em dash
-//	        typewriter.WithMapping("×", ""),    // keep × as-is
-//	    ),
-//	))
+//	r := typewriter.New(
+//	    typewriter.WithoutCategory(typewriter.Math),
+//	    typewriter.WithMapping("—", "--"),
+//	)
+//	clean := r.Replace(s)
 package typewriter
 
 import (
 	"strings"
 	"sync"
-
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/util"
 )
 
 // Category is a bitfield that groups related conversions.
@@ -69,7 +52,7 @@ type buildConfig struct {
 	overrides  map[string]string // from → to; empty to means "exclude"
 }
 
-// Option configures the extension.
+// Option configures a Replacer.
 type Option func(*buildConfig)
 
 // WithCategory sets the active categories to exactly c, replacing the default.
@@ -100,8 +83,8 @@ func WithMapping(from, to string) Option {
 	}
 }
 
-// Extension is the goldmark extension.
-type Extension struct {
+// Replacer applies typographic-to-ASCII conversions. Create with New.
+type Replacer struct {
 	r *strings.Replacer
 }
 
@@ -117,30 +100,52 @@ func getDefaultReplacer() *strings.Replacer {
 	return cachedDefault
 }
 
-// New creates the extension. With no options all Default categories are active.
-func New(opts ...Option) *Extension {
+// New creates a Replacer with the given options. With no options all Default
+// categories are active.
+func New(opts ...Option) *Replacer {
 	if len(opts) == 0 {
-		return &Extension{r: getDefaultReplacer()}
+		return &Replacer{r: getDefaultReplacer()}
 	}
 	cfg := &buildConfig{categories: Default}
 	for _, opt := range opts {
 		opt(cfg)
 	}
 	if cfg.categories == Default && len(cfg.overrides) == 0 {
-		return &Extension{r: getDefaultReplacer()}
+		return &Replacer{r: getDefaultReplacer()}
 	}
-	return &Extension{r: buildReplacer(cfg.categories, cfg.overrides)}
+	return &Replacer{r: buildReplacer(cfg.categories, cfg.overrides)}
+}
+
+// Replace returns s with all active typographic characters converted to ASCII.
+func (r *Replacer) Replace(s string) string {
+	return r.r.Replace(s)
+}
+
+// ReplaceBytes returns a copy of b with all active typographic characters
+// converted to ASCII.
+func (r *Replacer) ReplaceBytes(b []byte) []byte {
+	return []byte(r.r.Replace(string(b)))
+}
+
+// Replace returns s with all Default typographic characters converted to ASCII.
+func Replace(s string) string {
+	return getDefaultReplacer().Replace(s)
+}
+
+// ReplaceBytes returns a copy of b with all Default typographic characters
+// converted to ASCII.
+func ReplaceBytes(b []byte) []byte {
+	return []byte(getDefaultReplacer().Replace(string(b)))
 }
 
 // buildReplacer constructs a strings.Replacer from the active categories and
 // any per-entry overrides. Overrides take precedence over builtins; an empty
 // override value means "exclude this entry". strings.Replacer handles
-// longest-match ordering internally — no pre-sorting required.
+// longest-match ordering internally.
 func buildReplacer(cats Category, overrides map[string]string) *strings.Replacer {
 	args := make([]string, 0, len(builtinMappings)*2)
 	seen := make(map[string]bool, len(overrides)+len(builtinMappings))
 
-	// Overrides first so they shadow builtins.
 	for from, to := range overrides {
 		seen[from] = true
 		if to != "" {
@@ -148,7 +153,6 @@ func buildReplacer(cats Category, overrides map[string]string) *strings.Replacer
 		}
 	}
 
-	// Add builtins for active categories.
 	for _, m := range builtinMappings {
 		if cats&m.cat == 0 || seen[m.from] {
 			continue
@@ -158,27 +162,4 @@ func buildReplacer(cats Category, overrides map[string]string) *strings.Replacer
 	}
 
 	return strings.NewReplacer(args...)
-}
-
-// StripBytes applies the extension's conversions directly to raw bytes, without
-// any markdown parsing. Use this to normalise a markdown source before a
-// subsequent goldmark pass, where the intermediate form must remain valid
-// markdown rather than HTML.
-func (e *Extension) StripBytes(src []byte) []byte {
-	return []byte(e.r.Replace(string(src)))
-}
-
-// StripBytes is a package-level convenience that applies Default conversions
-// to raw bytes. Equivalent to New().StripBytes(src).
-func StripBytes(src []byte) []byte {
-	return []byte(getDefaultReplacer().Replace(string(src)))
-}
-
-// Extend implements goldmark.Extender.
-func (e *Extension) Extend(m goldmark.Markdown) {
-	m.Parser().AddOptions(
-		parser.WithASTTransformers(
-			util.Prioritized(&transformer{r: e.r}, 100),
-		),
-	)
 }
