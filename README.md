@@ -1,12 +1,10 @@
 # typewriter
 
-Converts typographic ("smart") Unicode characters back to their plain ASCII typewriter
-equivalents. Zero dependencies.
+Converts typographic ("smart") Unicode characters back to their plain ASCII equivalents,
+and normalises Unicode style variants (bold, italic, monospace, superscript, subscript)
+to plain text — optionally wrapping runs with configurable markup.
 
-Use it as a preprocessor to normalise mixed-source markdown before a smart-typography
-pass, or as a standalone sanitiser for copy-paste corruption in prose or code.
-
-For a goldmark extension that applies these conversions at the AST level, see
+Zero dependencies. For a goldmark extension see
 [goldmark-typewriter](https://github.com/client9/goldmark-typewriter).
 
 ## Quick start
@@ -14,16 +12,23 @@ For a goldmark extension that applies these conversions at the AST level, see
 ```go
 import "github.com/client9/typewriter"
 
-// Package-level convenience — all Default categories active.
+// Package-level convenience — all Default categories, no style conversion.
 clean := typewriter.Replace(s)
 clean := typewriter.ReplaceBytes(b)
 
 // Configured instance.
-r := typewriter.New(typewriter.WithoutCategory(typewriter.Math))
+r := typewriter.New(typewriter.Config{
+    Categories: typewriter.Default,
+    Runs: []typewriter.RunStyle{
+        {Style: typewriter.Bold, Prefix: "**", Suffix: "**"},
+    },
+})
 clean = r.Replace(s)
 ```
 
 ## What it converts
+
+### Character substitutions
 
 All categories are active by default.
 
@@ -37,55 +42,121 @@ All categories are active by default.
 | Math | `×` `÷` `≠` `≤` `≥` `→` | `x` `/` `!=` `<=` `>=` `->` |
 | Ligatures | `ﬁ` `ﬂ` `ﬀ` `ﬃ` | `fi` `fl` `ff` `ffi` |
 | Bullets | `•` `†` `‡` | `*` `*` `**` |
-| Spaces | NBSP, thin, en, em, figure, hair spaces | plain space |
+| Spaces | NBSP, thin, en, em, figure, hair, U+2028, U+2029 | plain space |
+
+### Unicode style variants (run-based)
+
+Runs of styled characters are detected and converted together, so the whole run can be
+wrapped with a prefix and suffix.
+
+| Style | Example | Default (strip) | Markdown | HTML |
+|-------|---------|-----------------|----------|------|
+| `Bold` | `𝗛𝗲𝗹𝗹𝗼` | `Hello` | `**Hello**` | `<b>Hello</b>` |
+| `Italic` | `𝘸𝘰𝘳𝘭𝘥` | `world` | `_world_` | `<i>world</i>` |
+| `BoldItalic` | `𝙃𝙚𝙡𝙡𝙤` | `Hello` | `***Hello***` | |
+| `Monospace` | `𝙷𝚎𝚕𝚕𝚘` | `Hello` | `` `Hello` `` | |
+| `Superscript` | `E=mc²` | `E=mc2` | `E=mc^2` | |
+| `Subscript` | `H₂O` | `H2O` | | |
+
+Style variants are not active by default — configure with `Config.Runs`.
 
 ## Configuration
 
-### Enable only specific categories
-
-`WithCategory` sets the active categories to exactly what you pass, replacing the default:
+### Config struct
 
 ```go
-// Only convert dashes and ellipses; everything else passes through.
-r := typewriter.New(typewriter.WithCategory(typewriter.Dashes | typewriter.Ellipsis))
+type Config struct {
+    Categories Category
+    Overrides  map[string]string // from → to; empty to = pass through unchanged
+    Runs       []RunStyle
+}
+
+type RunStyle struct {
+    Style  UnicodeStyle
+    Prefix string
+    Suffix string
+}
+```
+
+### Enable only specific categories
+
+`Categories` is a bitfield — set it to exactly the categories you want:
+
+```go
+// Only convert dashes and ellipses.
+r := typewriter.New(typewriter.Config{
+    Categories: typewriter.Dashes | typewriter.Ellipsis,
+})
 ```
 
 ### Disable specific categories
 
-`WithoutCategory` removes categories from the active set:
+Use bit-clear to remove from the default set:
 
 ```go
-r := typewriter.New(typewriter.WithoutCategory(typewriter.Math))
+r := typewriter.New(typewriter.Config{
+    Categories: typewriter.Default &^ typewriter.Math,
+})
 ```
 
-Options compose left-to-right:
+### Override or exclude individual characters
 
 ```go
-// Everything except Math and Bullets.
-r := typewriter.New(
-    typewriter.WithCategory(typewriter.CategoryAll),
-    typewriter.WithoutCategory(typewriter.Math | typewriter.Bullets),
-)
+r := typewriter.New(typewriter.Config{
+    Categories: typewriter.Default,
+    Overrides: map[string]string{
+        "—":   "--",   // prefer -- over --- for em dash
+        "×":   "",     // leave × unchanged (empty = pass through)
+        "°":   "deg",  // add a mapping not in builtins
+    },
+})
 ```
 
-### Override or exclude individual mappings
+### Convert Unicode bold/italic to markdown
 
 ```go
-r := typewriter.New(
-    typewriter.WithMapping("—", "--"),  // prefer -- over --- for em dash
-    typewriter.WithMapping("×", ""),    // leave × unchanged (empty = pass through)
-    typewriter.WithMapping("°", "deg"), // add a mapping not in builtins
-)
+r := typewriter.New(typewriter.Config{
+    Categories: typewriter.Default,
+    Runs: []typewriter.RunStyle{
+        {Style: typewriter.Bold,   Prefix: "**", Suffix: "**"},
+        {Style: typewriter.Italic, Prefix: "_",  Suffix: "_"},
+    },
+})
+r.Replace("𝗛𝗲𝗹𝗹𝗼 𝘸𝘰𝘳𝘭𝘥")  // → "**Hello** _world_"
+```
+
+### Convert Unicode bold/italic to HTML
+
+```go
+r := typewriter.New(typewriter.Config{
+    Categories: typewriter.Default,
+    Runs: []typewriter.RunStyle{
+        {Style: typewriter.Bold,   Prefix: "<b>",  Suffix: "</b>"},
+        {Style: typewriter.Italic, Prefix: "<i>",  Suffix: "</i>"},
+    },
+})
+```
+
+### Superscripts and subscripts
+
+```go
+r := typewriter.New(typewriter.Config{
+    Categories: typewriter.Default,
+    Runs: []typewriter.RunStyle{
+        {Style: typewriter.Superscript, Prefix: "^"},   // E=mc² → E=mc^2
+        {Style: typewriter.Subscript},                  // H₂O  → H2O
+    },
+})
 ```
 
 ## Normalising before smart typography
 
-Markdown arrives from multiple sources — hand-authored files, Word, AI-generated text,
-web scrapers — each with different typographic conventions. A typographer pass on mixed
-input produces inconsistent output: content already containing `"Hello"` passes through
-unchanged while `"Hello"` gets converted.
+Markdown from mixed sources (hand-authored, Word, AI-generated) arrives with
+inconsistent typography. A typographer pass on mixed input produces inconsistent output:
+content already containing `"Hello"` passes through unchanged while `"Hello"` gets
+converted.
 
-The fix is to strip to a clean ASCII baseline first, then apply smart typography:
+The fix is to strip to a clean ASCII baseline first:
 
 ```go
 import (
@@ -94,16 +165,11 @@ import (
     "github.com/yuin/goldmark/extension"
 )
 
-// Step 1: strip typographic characters from the raw markdown source.
 clean := typewriter.ReplaceBytes(src)
 
-// Step 2: render with the typographer — consistent output regardless of input source.
 md := goldmark.New(goldmark.WithExtensions(extension.Typographer))
 md.Convert(clean, &buf)
 ```
 
-The [goldmark-typewriter](https://github.com/client9/goldmark-typewriter) extension
-operates at the AST level and is useful for standalone normalisation, but it cannot
-participate in this two-pass pipeline: goldmark's typographer is an inline parser (runs
-during tokenisation) while the AST transformer runs after, so the typographer always
-fires first in a single goldmark instance.
+For goldmark integration (converting typographic characters inside an AST walk) see
+[goldmark-typewriter](https://github.com/client9/goldmark-typewriter).
