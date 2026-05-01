@@ -3,7 +3,8 @@
 //
 // It is the complement of goldmark's built-in typographer extension and tools
 // like Smarty Pants. Content inside code spans and fenced blocks is left
-// untouched.
+// untouched by the extension form; use StripBytes to normalise everything
+// including code content.
 //
 // All categories are active by default:
 //
@@ -15,10 +16,10 @@
 //	    typewriter.New(typewriter.WithoutCategory(typewriter.Math)),
 //	))
 //
-// Opt in to space normalisation (off by default):
+// Enable only specific categories:
 //
 //	md := goldmark.New(goldmark.WithExtensions(
-//	    typewriter.New(typewriter.WithSpaces()),
+//	    typewriter.New(typewriter.WithCategory(typewriter.Dashes | typewriter.Ellipsis)),
 //	))
 //
 // Override or remove individual conversions:
@@ -32,7 +33,7 @@
 package typewriter
 
 import (
-	"sort"
+	"strings"
 	"sync"
 
 	"github.com/yuin/goldmark"
@@ -52,17 +53,17 @@ const (
 	Math                           // × ÷ ≠ ≤ ≥ → x / != <= >=
 	Ligatures                      // ﬁ ﬂ ﬀ → fi fl ff
 	Bullets                        // • · † ‡ → * . * **
-	Spaces                         // non-breaking/em/en/thin spaces → space (opt-in)
+	Spaces                         // non-breaking and width-variant Unicode spaces → plain ASCII space
 
-	// Default is all categories except Spaces, which can change document
-	// semantics and is therefore opt-in via WithSpaces.
-	Default = Quotes | Dashes | Ellipsis | Fractions | Symbols | Math | Ligatures | Bullets
+	// Default is all defined categories.
+	Default = Quotes | Dashes | Ellipsis | Fractions | Symbols | Math | Ligatures | Bullets | Spaces
 
-	// CategoryAll is every defined category, including Spaces.
-	CategoryAll = Default | Spaces
+	// CategoryAll is an alias for Default. Kept for forward compatibility in
+	// case a future opt-in category is added.
+	CategoryAll = Default
 )
 
-// buildConfig accumulates option values before pairs are compiled.
+// buildConfig accumulates option values before the replacer is built.
 type buildConfig struct {
 	categories Category
 	overrides  map[string]string // from → to; empty to means "exclude"
@@ -72,10 +73,8 @@ type buildConfig struct {
 type Option func(*buildConfig)
 
 // WithCategory sets the active categories to exactly c, replacing the default.
-// Use this to enable only specific categories:
 //
 //	typewriter.WithCategory(typewriter.Quotes | typewriter.Dashes)
-//	typewriter.WithCategory(typewriter.CategoryAll)
 func WithCategory(c Category) Option {
 	return func(cfg *buildConfig) { cfg.categories = c }
 }
@@ -85,13 +84,6 @@ func WithCategory(c Category) Option {
 //	typewriter.WithoutCategory(typewriter.Math | typewriter.Bullets)
 func WithoutCategory(c Category) Option {
 	return func(cfg *buildConfig) { cfg.categories &^= c }
-}
-
-// WithSpaces enables normalisation of non-breaking and other non-standard
-// Unicode spaces to a plain ASCII space. Off by default because changing
-// spaces can affect line-breaking intent.
-func WithSpaces() Option {
-	return func(cfg *buildConfig) { cfg.categories |= Spaces }
 }
 
 // WithMapping adds or overrides a single conversion. Set to to an empty
@@ -110,18 +102,17 @@ func WithMapping(from, to string) Option {
 
 // Extension is the goldmark extension.
 type Extension struct {
-	pairs [][2]string // precomputed at New(); immutable thereafter
+	r *strings.Replacer
 }
 
-// defaultPairs caches the compiled pair list for the Default category set.
 var (
-	cachedDefault     [][2]string
+	cachedDefault     *strings.Replacer
 	cachedDefaultOnce sync.Once
 )
 
-func getDefaultPairs() [][2]string {
+func getDefaultReplacer() *strings.Replacer {
 	cachedDefaultOnce.Do(func() {
-		cachedDefault = compilePairs(Default, nil)
+		cachedDefault = buildReplacer(Default, nil)
 	})
 	return cachedDefault
 }
@@ -129,33 +120,31 @@ func getDefaultPairs() [][2]string {
 // New creates the extension. With no options all Default categories are active.
 func New(opts ...Option) *Extension {
 	if len(opts) == 0 {
-		return &Extension{pairs: getDefaultPairs()}
+		return &Extension{r: getDefaultReplacer()}
 	}
 	cfg := &buildConfig{categories: Default}
 	for _, opt := range opts {
 		opt(cfg)
 	}
 	if cfg.categories == Default && len(cfg.overrides) == 0 {
-		return &Extension{pairs: getDefaultPairs()}
+		return &Extension{r: getDefaultReplacer()}
 	}
-	return &Extension{pairs: compilePairs(cfg.categories, cfg.overrides)}
+	return &Extension{r: buildReplacer(cfg.categories, cfg.overrides)}
 }
 
-// compilePairs builds the sorted replacement table from active categories
-// and any per-entry overrides. Overrides take precedence over builtins;
-// an empty override value means "exclude this entry".
-func compilePairs(cats Category, overrides map[string]string) [][2]string {
-	// Reserve capacity: rough estimate of active entries.
-	pairs := make([][2]string, 0, len(builtinMappings))
-
-	// Track which sources are already decided (by override or previous builtin).
+// buildReplacer constructs a strings.Replacer from the active categories and
+// any per-entry overrides. Overrides take precedence over builtins; an empty
+// override value means "exclude this entry". strings.Replacer handles
+// longest-match ordering internally — no pre-sorting required.
+func buildReplacer(cats Category, overrides map[string]string) *strings.Replacer {
+	args := make([]string, 0, len(builtinMappings)*2)
 	seen := make(map[string]bool, len(overrides)+len(builtinMappings))
 
 	// Overrides first so they shadow builtins.
 	for from, to := range overrides {
 		seen[from] = true
 		if to != "" {
-			pairs = append(pairs, [2]string{from, to})
+			args = append(args, from, to)
 		}
 	}
 
@@ -165,26 +154,31 @@ func compilePairs(cats Category, overrides map[string]string) [][2]string {
 			continue
 		}
 		seen[m.from] = true
-		pairs = append(pairs, [2]string{m.from, m.to})
+		args = append(args, m.from, m.to)
 	}
 
-	// Sort longest source first. Most sources are single codepoints but a few
-	// (like ligatures stored as multi-byte UTF-8) differ in byte length.
-	sort.Slice(pairs, func(i, j int) bool {
-		li, lj := len(pairs[i][0]), len(pairs[j][0])
-		if li != lj {
-			return li > lj
-		}
-		return pairs[i][0] < pairs[j][0]
-	})
-	return pairs
+	return strings.NewReplacer(args...)
+}
+
+// StripBytes applies the extension's conversions directly to raw bytes, without
+// any markdown parsing. Use this to normalise a markdown source before a
+// subsequent goldmark pass, where the intermediate form must remain valid
+// markdown rather than HTML.
+func (e *Extension) StripBytes(src []byte) []byte {
+	return []byte(e.r.Replace(string(src)))
+}
+
+// StripBytes is a package-level convenience that applies Default conversions
+// to raw bytes. Equivalent to New().StripBytes(src).
+func StripBytes(src []byte) []byte {
+	return []byte(getDefaultReplacer().Replace(string(src)))
 }
 
 // Extend implements goldmark.Extender.
 func (e *Extension) Extend(m goldmark.Markdown) {
 	m.Parser().AddOptions(
 		parser.WithASTTransformers(
-			util.Prioritized(&transformer{pairs: e.pairs}, 100),
+			util.Prioritized(&transformer{r: e.r}, 100),
 		),
 	)
 }

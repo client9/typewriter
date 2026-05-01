@@ -24,6 +24,11 @@ func (t *transformer) Transform(doc *ast.Document, reader text.Reader, pc parser
 		switch n.Kind() {
 		case ast.KindCodeBlock, ast.KindFencedCodeBlock, ast.KindCodeSpan,
 			ast.KindHTMLBlock, ast.KindRawHTML:
+			// The HTML renderer reads code content directly from source[]
+			// via segment.Value(source) and expects ast.Text children, not
+			// ast.String. Replacing nodes here would panic the renderer.
+			// Use StripBytes on the raw source before parsing to normalise
+			// code content.
 			return ast.WalkSkipChildren, nil
 		case ast.KindText:
 			replaceText(n.(*ast.Text), source, t.pairs)
