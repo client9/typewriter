@@ -9,7 +9,7 @@ import (
 func TestQuotes(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"“Hello”", `"Hello"`},   // "Hello" (curly doubles)
-		{"‘it’s’", `'it's'`},     // 'it's' (curly singles)
+		{"'it’s'", `'it's'`},     // 'it's' (curly singles)
 		{"«hello»", `<<hello>>`}, // «hello» (angle)
 		{"„low”", `"low"`},       // „low" (low-9 open)
 	}
@@ -139,34 +139,30 @@ func TestSpaces(t *testing.T) {
 		t.Errorf("default: got %q", got)
 	}
 
-	// WithoutCategory(Spaces) preserves NBSP.
-	r := typewriter.New(typewriter.WithoutCategory(typewriter.Spaces))
+	// Excluding Spaces preserves NBSP.
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default &^ typewriter.Spaces,
+	})
 	got = r.Replace("a b")
 	if got != "a b" {
-		t.Errorf("WithoutCategory(Spaces): got %q", got)
+		t.Errorf("without Spaces: got %q", got)
 	}
 }
 
-func TestWithCategory(t *testing.T) {
-	t.Run("whitelist", func(t *testing.T) {
-		r := typewriter.New(typewriter.WithCategory(typewriter.Ellipsis))
-		if got := r.Replace("wait…"); got != "wait..." {
-			t.Errorf("ellipsis: got %q", got)
-		}
-		if got := r.Replace("em—dash"); got != "em—dash" {
-			t.Errorf("dash should pass through: got %q", got)
-		}
-	})
-	t.Run("all", func(t *testing.T) {
-		r := typewriter.New(typewriter.WithCategory(typewriter.CategoryAll))
-		if got := r.Replace("wait…"); got != "wait..." {
-			t.Errorf("got %q", got)
-		}
-	})
+func TestCategoryWhitelist(t *testing.T) {
+	r := typewriter.New(typewriter.Config{Categories: typewriter.Ellipsis})
+	if got := r.Replace("wait…"); got != "wait..." {
+		t.Errorf("ellipsis: got %q", got)
+	}
+	if got := r.Replace("em—dash"); got != "em—dash" {
+		t.Errorf("dash should pass through: got %q", got)
+	}
 }
 
-func TestWithoutCategory(t *testing.T) {
-	r := typewriter.New(typewriter.WithoutCategory(typewriter.Math))
+func TestCategoryExclude(t *testing.T) {
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default &^ typewriter.Math,
+	})
 	if got := r.Replace("10×"); got != "10×" {
 		t.Errorf("× should pass through: got %q", got)
 	}
@@ -175,21 +171,30 @@ func TestWithoutCategory(t *testing.T) {
 	}
 }
 
-func TestWithMapping(t *testing.T) {
+func TestOverrides(t *testing.T) {
 	t.Run("override", func(t *testing.T) {
-		r := typewriter.New(typewriter.WithMapping("—", "--"))
+		r := typewriter.New(typewriter.Config{
+			Categories: typewriter.Default,
+			Overrides:  map[string]string{"—": "--"},
+		})
 		if got := r.Replace("em—dash"); got != "em--dash" {
 			t.Errorf("got %q", got)
 		}
 	})
 	t.Run("exclude", func(t *testing.T) {
-		r := typewriter.New(typewriter.WithMapping("×", ""))
+		r := typewriter.New(typewriter.Config{
+			Categories: typewriter.Default,
+			Overrides:  map[string]string{"×": ""},
+		})
 		if got := r.Replace("10×"); got != "10×" {
 			t.Errorf("got %q", got)
 		}
 	})
 	t.Run("add_custom", func(t *testing.T) {
-		r := typewriter.New(typewriter.WithMapping("°", "deg"))
+		r := typewriter.New(typewriter.Config{
+			Categories: typewriter.Default,
+			Overrides:  map[string]string{"°": "deg"},
+		})
 		if got := r.Replace("90°"); got != "90deg" {
 			t.Errorf("got %q", got)
 		}
@@ -204,22 +209,116 @@ func TestReplaceBytes(t *testing.T) {
 	}
 }
 
+// boldHello = 𝗛𝗲𝗹𝗹𝗼  (sans-serif bold)
+const boldHello = "\U0001d5db\U0001d5f2\U0001d5f9\U0001d5f9\U0001d5fc"
+
+// italicWorld = 𝘸𝘰𝘳𝘭𝘥  (sans-serif italic)
+const italicWorld = "\U0001d638\U0001d630\U0001d633\U0001d62d\U0001d625"
+
+// boldWorld = 𝘄𝗼𝗿𝗹𝗱  (sans-serif bold)
+const boldWorld = "\U0001d604\U0001d5fc\U0001d5ff\U0001d5f9\U0001d5f1"
+
+func TestRunsBoldStrip(t *testing.T) {
+	// No prefix/suffix: strip to plain ASCII.
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default,
+		Runs:       []typewriter.RunStyle{{Style: typewriter.Bold}},
+	})
+	if got := r.Replace(boldHello); got != "Hello" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestRunsBoldMarkdown(t *testing.T) {
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default,
+		Runs:       []typewriter.RunStyle{{Style: typewriter.Bold, Prefix: "**", Suffix: "**"}},
+	})
+	if got := r.Replace(boldHello + " world"); got != "**Hello** world" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestRunsMultipleStyles(t *testing.T) {
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default,
+		Runs: []typewriter.RunStyle{
+			{Style: typewriter.Bold, Prefix: "**", Suffix: "**"},
+			{Style: typewriter.Italic, Prefix: "_", Suffix: "_"},
+		},
+	})
+	if got := r.Replace(boldHello + " " + italicWorld); got != "**Hello** _world_" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestRunsSuperscript(t *testing.T) {
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default,
+		Runs:       []typewriter.RunStyle{{Style: typewriter.Superscript, Prefix: "^"}},
+	})
+	got := r.Replace("E=mc²")
+	if got != "E=mc^2" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestRunsSubscript(t *testing.T) {
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default,
+		Runs:       []typewriter.RunStyle{{Style: typewriter.Subscript}},
+	})
+	got := r.Replace("H₂O")
+	if got != "H2O" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestRunsInterleaved(t *testing.T) {
+	// Char substitutions (©) and run detection in the same string.
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default,
+		Runs:       []typewriter.RunStyle{{Style: typewriter.Bold, Prefix: "**", Suffix: "**"}},
+	})
+	got := r.Replace(boldHello + " © " + boldWorld)
+	if got != "**Hello** (c) **world**" {
+		t.Errorf("got %q", got)
+	}
+}
+
 func BenchmarkNew(b *testing.B) {
-	b.Run("no_options", func(b *testing.B) {
+	b.Run("no_runs", func(b *testing.B) {
+		cfg := typewriter.Config{Categories: typewriter.Default}
 		for range b.N {
-			_ = typewriter.New()
+			_ = typewriter.New(cfg)
 		}
 	})
-	b.Run("with_option", func(b *testing.B) {
+	b.Run("with_runs", func(b *testing.B) {
+		cfg := typewriter.Config{
+			Categories: typewriter.Default,
+			Runs:       []typewriter.RunStyle{{Style: typewriter.Bold, Prefix: "**", Suffix: "**"}},
+		}
 		for range b.N {
-			_ = typewriter.New(typewriter.WithoutCategory(typewriter.Math))
+			_ = typewriter.New(cfg)
 		}
 	})
 }
 
 func BenchmarkReplace(b *testing.B) {
-	r := typewriter.New()
+	r := typewriter.New(typewriter.Config{Categories: typewriter.Default})
 	s := "“Hello” — wait… © 2024"
+	b.ResetTimer()
+	for range b.N {
+		_ = r.Replace(s)
+	}
+}
+
+func BenchmarkReplaceWithRuns(b *testing.B) {
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default,
+		Runs:       []typewriter.RunStyle{{Style: typewriter.Bold, Prefix: "**", Suffix: "**"}},
+	})
+	s := boldHello + " — wait…"
 	b.ResetTimer()
 	for range b.N {
 		_ = r.Replace(s)

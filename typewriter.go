@@ -1,147 +1,165 @@
 // Package typewriter converts typographic ("smart") Unicode characters back to
-// their plain ASCII typewriter equivalents.
+// their plain ASCII typewriter equivalents, and strips Unicode style variants
+// (bold, italic, monospace, etc.) back to plain letters.
 //
-// It is the complement of goldmark's typographer extension and tools like
-// Smarty Pants. Use it as a preprocessor before a smart-typography pass to
-// normalise mixed input to a consistent ASCII baseline.
+// Use package-level functions for the common case:
 //
-// All categories are active by default:
-//
-//	clean := typewriter.ReplaceBytes(src)
 //	clean := typewriter.Replace(s)
+//	clean := typewriter.ReplaceBytes(b)
 //
-// Configure with options:
+// Configure with a Config struct:
 //
-//	r := typewriter.New(
-//	    typewriter.WithoutCategory(typewriter.Math),
-//	    typewriter.WithMapping("—", "--"),
-//	)
+//	r := typewriter.New(typewriter.Config{
+//	    Categories: typewriter.Default,
+//	    Runs: []typewriter.RunStyle{
+//	        {Style: typewriter.Bold, Prefix: "**", Suffix: "**"},
+//	    },
+//	})
 //	clean := r.Replace(s)
 package typewriter
 
 import (
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
-// Category is a bitfield that groups related conversions.
+// Category is a bitfield grouping related character conversions.
 type Category uint
 
 const (
-	Quotes    Category = 1 << iota // "curly" and «angle» quotes → straight ASCII
-	Dashes                         // — en/em dashes → ---/--
+	Quotes    Category = 1 << iota // curly/angle quotes → straight ASCII
+	Dashes                         // em/en dashes → ---/--
 	Ellipsis                       // … → ...
 	Fractions                      // ½ ¼ ¾ → 1/2 1/4 3/4
 	Symbols                        // © ® ™ § ¶ → (c) (r) (tm) S. P.
 	Math                           // × ÷ ≠ ≤ ≥ → x / != <= >=
 	Ligatures                      // ﬁ ﬂ ﬀ → fi fl ff
 	Bullets                        // • · † ‡ → * . * **
-	Spaces                         // non-breaking and width-variant Unicode spaces → plain ASCII space
+	Spaces                         // non-breaking and width-variant spaces → plain space
 
 	// Default is all defined categories.
 	Default = Quotes | Dashes | Ellipsis | Fractions | Symbols | Math | Ligatures | Bullets | Spaces
 
-	// CategoryAll is an alias for Default. Kept for forward compatibility in
-	// case a future opt-in category is added.
+	// CategoryAll is an alias for Default, kept for forward compatibility.
 	CategoryAll = Default
 )
 
-// buildConfig accumulates option values before the replacer is built.
-type buildConfig struct {
-	categories Category
-	overrides  map[string]string // from → to; empty to means "exclude"
+// UnicodeStyle identifies a typographic Unicode style variant.
+type UnicodeStyle int
+
+const (
+	Bold        UnicodeStyle = iota // 𝗔𝗕𝗖 → ABC
+	Italic                          // 𝘈𝘉𝘊 → ABC
+	BoldItalic                      // 𝘼𝘽𝘾 → ABC
+	Monospace                       // 𝙰𝙱𝙲 → ABC
+	Superscript                     // ²⁴  → 24
+	Subscript                       // ₂₄  → 24
+)
+
+// RunStyle configures how a run of styled Unicode characters is converted.
+// The ASCII text of the run is wrapped with Prefix and Suffix.
+// Empty Prefix and Suffix strips the run to plain ASCII.
+type RunStyle struct {
+	Style  UnicodeStyle
+	Prefix string
+	Suffix string
 }
 
-// Option configures a Replacer.
-type Option func(*buildConfig)
-
-// WithCategory sets the active categories to exactly c, replacing the default.
-//
-//	typewriter.WithCategory(typewriter.Quotes | typewriter.Dashes)
-func WithCategory(c Category) Option {
-	return func(cfg *buildConfig) { cfg.categories = c }
-}
-
-// WithoutCategory removes one or more categories from the active set.
-//
-//	typewriter.WithoutCategory(typewriter.Math | typewriter.Bullets)
-func WithoutCategory(c Category) Option {
-	return func(cfg *buildConfig) { cfg.categories &^= c }
-}
-
-// WithMapping adds or overrides a single conversion. Set to to an empty
-// string to prevent a character from being converted at all.
-//
-//	typewriter.WithMapping("—", "--")  // prefer -- over ---
-//	typewriter.WithMapping("×", "")    // leave × unchanged
-func WithMapping(from, to string) Option {
-	return func(cfg *buildConfig) {
-		if cfg.overrides == nil {
-			cfg.overrides = make(map[string]string)
-		}
-		cfg.overrides[from] = to
-	}
+// Config configures a Replacer.
+type Config struct {
+	Categories Category
+	Overrides  map[string]string // from → to; empty to = pass through unchanged
+	Runs       []RunStyle
 }
 
 // Replacer applies typographic-to-ASCII conversions. Create with New.
 type Replacer struct {
-	r *strings.Replacer
+	sr     *strings.Replacer
+	runs   []RunStyle
+	lookup map[rune]styledRune
 }
 
-var (
-	cachedDefault     *strings.Replacer
-	cachedDefaultOnce sync.Once
-)
+var defaultReplacer = sync.OnceValue(func() *Replacer {
+	return New(Config{Categories: Default})
+})
 
-func getDefaultReplacer() *strings.Replacer {
-	cachedDefaultOnce.Do(func() {
-		cachedDefault = buildReplacer(Default, nil)
-	})
-	return cachedDefault
+// New creates a Replacer from cfg.
+func New(cfg Config) *Replacer {
+	return &Replacer{
+		sr:     buildReplacer(cfg.Categories, cfg.Overrides),
+		runs:   cfg.Runs,
+		lookup: buildStyleLookup(cfg.Runs),
+	}
 }
 
-// New creates a Replacer with the given options. With no options all Default
-// categories are active.
-func New(opts ...Option) *Replacer {
-	if len(opts) == 0 {
-		return &Replacer{r: getDefaultReplacer()}
-	}
-	cfg := &buildConfig{categories: Default}
-	for _, opt := range opts {
-		opt(cfg)
-	}
-	if cfg.categories == Default && len(cfg.overrides) == 0 {
-		return &Replacer{r: getDefaultReplacer()}
-	}
-	return &Replacer{r: buildReplacer(cfg.categories, cfg.overrides)}
-}
-
-// Replace returns s with all active typographic characters converted to ASCII.
+// Replace returns s with all active conversions applied.
 func (r *Replacer) Replace(s string) string {
-	return r.r.Replace(s)
+	if len(r.runs) == 0 {
+		return r.sr.Replace(s)
+	}
+	return r.replaceWithRuns(s)
 }
 
-// ReplaceBytes returns a copy of b with all active typographic characters
-// converted to ASCII.
+// ReplaceBytes returns a copy of b with all active conversions applied.
 func (r *Replacer) ReplaceBytes(b []byte) []byte {
-	return []byte(r.r.Replace(string(b)))
+	return []byte(r.Replace(string(b)))
 }
 
-// Replace returns s with all Default typographic characters converted to ASCII.
-func Replace(s string) string {
-	return getDefaultReplacer().Replace(s)
+func (r *Replacer) replaceWithRuns(s string) string {
+	var buf strings.Builder
+	buf.Grow(len(s))
+	segStart := 0
+
+	for i := 0; i < len(s); {
+		ru, size := utf8.DecodeRuneInString(s[i:])
+		sr, ok := r.lookup[ru]
+		if !ok {
+			i += size
+			continue
+		}
+		// Flush the non-run segment through the char replacer.
+		if i > segStart {
+			buf.WriteString(r.sr.Replace(s[segStart:i]))
+		}
+		rs := r.findRunStyle(sr.style)
+		buf.WriteString(rs.Prefix)
+		buf.WriteRune(sr.ascii)
+		i += size
+		// Consume the rest of the run.
+		for i < len(s) {
+			ru2, size2 := utf8.DecodeRuneInString(s[i:])
+			sr2, ok2 := r.lookup[ru2]
+			if !ok2 || sr2.style != sr.style {
+				break
+			}
+			buf.WriteRune(sr2.ascii)
+			i += size2
+		}
+		buf.WriteString(rs.Suffix)
+		segStart = i
+	}
+	if segStart < len(s) {
+		buf.WriteString(r.sr.Replace(s[segStart:]))
+	}
+	return buf.String()
 }
 
-// ReplaceBytes returns a copy of b with all Default typographic characters
-// converted to ASCII.
-func ReplaceBytes(b []byte) []byte {
-	return []byte(getDefaultReplacer().Replace(string(b)))
+func (r *Replacer) findRunStyle(style UnicodeStyle) RunStyle {
+	for _, rs := range r.runs {
+		if rs.Style == style {
+			return rs
+		}
+	}
+	return RunStyle{}
 }
 
-// buildReplacer constructs a strings.Replacer from the active categories and
-// any per-entry overrides. Overrides take precedence over builtins; an empty
-// override value means "exclude this entry". strings.Replacer handles
-// longest-match ordering internally.
+// Replace returns s with all Default conversions applied.
+func Replace(s string) string { return defaultReplacer().Replace(s) }
+
+// ReplaceBytes returns a copy of b with all Default conversions applied.
+func ReplaceBytes(b []byte) []byte { return defaultReplacer().ReplaceBytes(b) }
+
 func buildReplacer(cats Category, overrides map[string]string) *strings.Replacer {
 	args := make([]string, 0, len(builtinMappings)*2)
 	seen := make(map[string]bool, len(overrides)+len(builtinMappings))
@@ -152,7 +170,6 @@ func buildReplacer(cats Category, overrides map[string]string) *strings.Replacer
 			args = append(args, from, to)
 		}
 	}
-
 	for _, m := range builtinMappings {
 		if cats&m.cat == 0 || seen[m.from] {
 			continue
@@ -160,6 +177,5 @@ func buildReplacer(cats Category, overrides map[string]string) *strings.Replacer
 		seen[m.from] = true
 		args = append(args, m.from, m.to)
 	}
-
 	return strings.NewReplacer(args...)
 }
