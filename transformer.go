@@ -1,7 +1,7 @@
 package typewriter
 
 import (
-	"bytes"
+	"strings"
 
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
@@ -9,13 +9,10 @@ import (
 )
 
 type transformer struct {
-	pairs [][2]string
+	r *strings.Replacer
 }
 
 func (t *transformer) Transform(doc *ast.Document, reader text.Reader, pc parser.Context) {
-	if len(t.pairs) == 0 {
-		return
-	}
 	source := reader.Source()
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -31,21 +28,17 @@ func (t *transformer) Transform(doc *ast.Document, reader text.Reader, pc parser
 			// code content.
 			return ast.WalkSkipChildren, nil
 		case ast.KindText:
-			replaceText(n.(*ast.Text), source, t.pairs)
+			replaceText(n.(*ast.Text), source, t.r)
 		}
 		return ast.WalkContinue, nil
 	})
 }
 
-func replaceText(node *ast.Text, source []byte, pairs [][2]string) {
-	content := node.Segment.Value(source)
-	result := content
-	for _, p := range pairs {
-		result = bytes.ReplaceAll(result, []byte(p[0]), []byte(p[1]))
-	}
-	if bytes.Equal(result, content) {
+func replaceText(node *ast.Text, source []byte, r *strings.Replacer) {
+	src := string(node.Segment.Value(source))
+	result := r.Replace(src)
+	if result == src {
 		return
 	}
-	newNode := ast.NewString(result)
-	node.Parent().ReplaceChild(node.Parent(), node, newNode)
+	node.Parent().ReplaceChild(node.Parent(), node, ast.NewString([]byte(result)))
 }
