@@ -98,7 +98,10 @@ var builtinMappings = []mapping{
 	{Bullets, "†", `*`},  // † DAGGER
 	{Bullets, "‡", `**`}, // ‡ DOUBLE DAGGER
 
-	// Spaces — normalise non-standard spaces to ASCII space (opt-in)
+	// Spaces — normalise non-standard whitespace to ASCII space.
+	// Includes Unicode Zs (space separators) and the structural separators
+	// U+2028/U+2029 (Zl/Zp). The latter appear in AI-generated text and JSON
+	// payloads; converting to plain space is the honest conversion.
 	{Spaces, " ", ` `}, // NO-BREAK SPACE
 	{Spaces, " ", ` `}, // NARROW NO-BREAK SPACE
 	{Spaces, " ", ` `}, // FIGURE SPACE
@@ -106,4 +109,6 @@ var builtinMappings = []mapping{
 	{Spaces, " ", ` `}, // EM SPACE
 	{Spaces, " ", ` `}, // THIN SPACE
 	{Spaces, " ", ` `}, // HAIR SPACE
+	{Spaces, " ", ` `}, // U+2028  LINE SEPARATOR (Zl)
+	{Spaces, " ", ` `}, // U+2029  PARAGRAPH SEPARATOR (Zp)
 }
