@@ -7,8 +7,10 @@ Converts typographic ("smart") Unicode characters back to their plain ASCII equi
 and normalises Unicode style variants (bold, italic, monospace, superscript, subscript)
 to plain text — optionally wrapping runs with configurable markup.
 
-Zero dependencies. Requires Go 1.22+. For a goldmark extension see
-[goldmark-typewriter](https://github.com/client9/goldmark-typewriter).
+- Requires Go 1.22+
+- Uses only stdlib, no dependencies
+- Safe for concurrent use
+- For a goldmark extension see [goldmark-typewriter](https://github.com/client9/goldmark-typewriter).
 
 ## Installation
 
