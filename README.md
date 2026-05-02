@@ -179,5 +179,5 @@ For goldmark integration (converting typographic characters inside an AST walk) 
 
 ## License
 
-[MIT](/LICENSE.md)
+[MIT](/LICENSE)
 
