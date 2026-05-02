@@ -25,9 +25,12 @@ func TestQuotes(t *testing.T) {
 
 func TestDashes(t *testing.T) {
 	tests := []struct{ in, want string }{
-		{"em—dash", "em---dash"},
-		{"en–dash", "en--dash"},
-		{"minus−sign", "minus-sign"},
+		{"em—dash", "em---dash"},          // — EM DASH
+		{"en–dash", "en--dash"},           // – EN DASH
+		{"fig‒dash", "fig-dash"},     // ‒ FIGURE DASH
+		{"nb‑hyphen", "nb-hyphen"},   // ‑ NON-BREAKING HYPHEN
+		{"a‐b", "a-b"},               // ‐ HYPHEN
+		{"minus−sign", "minus-sign"}, // − MINUS SIGN
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
@@ -133,20 +136,40 @@ func TestBullets(t *testing.T) {
 }
 
 func TestSpaces(t *testing.T) {
-	// NBSP should be converted to a plain space by default.
-	got := typewriter.Replace("a b")
-	if got != "a b" {
-		t.Errorf("default: got %q", got)
+	// All 9 Spaces entries should convert to a plain ASCII space.
+	tests := []struct {
+		name string
+		in   string
+	}{
+		{"nbsp", "a b"},        // NO-BREAK SPACE
+		{"narrow_nbsp", "a b"}, // NARROW NO-BREAK SPACE
+		{"figure", "a b"},      // FIGURE SPACE
+		{"en", "a b"},          // EN SPACE
+		{"em", "a b"},          // EM SPACE
+		{"thin", "a b"},        // THIN SPACE
+		{"hair", "a b"},        // HAIR SPACE
+		{"line_sep", "a b"},    // LINE SEPARATOR
+		{"para_sep", "a b"},    // PARAGRAPH SEPARATOR
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := typewriter.Replace(tt.in)
+			if got != "a b" {
+				t.Errorf("got %q, want %q", got, "a b")
+			}
+		})
 	}
 
-	// Excluding Spaces preserves NBSP.
-	r := typewriter.New(typewriter.Config{
-		Categories: typewriter.Default &^ typewriter.Spaces,
+	// Excluding Spaces preserves the characters.
+	t.Run("opt_out", func(t *testing.T) {
+		r := typewriter.New(typewriter.Config{
+			Categories: typewriter.Default &^ typewriter.Spaces,
+		})
+		got := r.Replace("a b")
+		if got != "a b" {
+			t.Errorf("without Spaces: got %q", got)
+		}
 	})
-	got = r.Replace("a b")
-	if got != "a b" {
-		t.Errorf("without Spaces: got %q", got)
-	}
 }
 
 func TestCategoryWhitelist(t *testing.T) {

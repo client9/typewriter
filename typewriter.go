@@ -1,3 +1,24 @@
+// Package typewriter converts typographic ("smart") Unicode characters back to
+// plain ASCII and normalises Unicode style variants back to plain letters.
+//
+// It handles curly and angle quotes, em/en dashes, ellipsis, ligatures,
+// fractions, common symbols, math operators, non-breaking spaces, and
+// sans-serif bold/italic/monospace/superscript/subscript variants that appear
+// in copy-pasted social-media and AI-generated text.
+//
+// Basic usage with defaults (all categories enabled):
+//
+//	out := typewriter.Replace("“Hello” — wait…")
+//	// out == `"Hello" --- wait...`
+//
+// For custom configuration, construct a [Replacer] via [New]:
+//
+//	r := typewriter.New(typewriter.Config{
+//	    Categories: typewriter.Default,
+//	    Runs: []typewriter.RunStyle{
+//	        {Style: typewriter.Bold, Prefix: "**", Suffix: "**"},
+//	    },
+//	})
 package typewriter
 
 import (
@@ -36,13 +57,13 @@ const (
 type UnicodeStyle int
 
 const (
-	StyleUnknown UnicodeStyle = iota // zero value — not a valid style
-	Bold                             // 𝗔𝗕𝗖 → ABC
-	Italic                           // 𝘈𝘉𝘊 → ABC
-	BoldItalic                       // 𝘼𝘽𝘾 → ABC
-	Monospace                        // 𝙰𝙱𝙲 → ABC
-	Superscript                      // ²⁴  → 24
-	Subscript                        // ₂₄  → 24
+	StyleUnknown UnicodeStyle = iota // zero value; not a valid style
+	Bold                             // sans-serif bold: 𝗔𝗕𝗖 → ABC
+	Italic                           // sans-serif italic: 𝘈𝘉𝘊 → ABC
+	BoldItalic                       // sans-serif bold-italic: 𝘼𝘽𝘾 → ABC
+	Monospace                        // monospace: 𝙰𝙱𝙲 → ABC
+	Superscript                      // superscript digits/letters: ²⁴ → 24
+	Subscript                        // subscript digits: ₂₄ → 24
 )
 
 // RunStyle configures how a contiguous run of styled Unicode characters is
@@ -50,6 +71,8 @@ const (
 // When both are empty the run is stripped to plain ASCII with no added markup.
 //
 // Style must be set explicitly; [StyleUnknown] (zero value) matches nothing.
+// If the same Style value appears more than once in [Config.Runs], only the
+// first occurrence is used; subsequent duplicates are silently ignored.
 type RunStyle struct {
 	Style  UnicodeStyle // style variant to detect; must not be StyleUnknown
 	Prefix string       // prepended to the recovered ASCII text
@@ -95,7 +118,11 @@ func New(cfg Config) *Replacer {
 }
 
 // Replace returns s with all active conversions applied.
+// If r is nil, the package-level [Default] replacer is used.
 func (r *Replacer) Replace(s string) string {
+	if r == nil {
+		return defaultReplacer().Replace(s)
+	}
 	if len(r.runs) == 0 {
 		return r.sr.Replace(s)
 	}
@@ -103,7 +130,11 @@ func (r *Replacer) Replace(s string) string {
 }
 
 // ReplaceBytes returns a copy of b with all active conversions applied.
+// If r is nil, the package-level [Default] replacer is used.
 func (r *Replacer) ReplaceBytes(b []byte) []byte {
+	if r == nil {
+		return defaultReplacer().ReplaceBytes(b)
+	}
 	return []byte(r.Replace(string(b)))
 }
 
