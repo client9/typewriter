@@ -25,8 +25,8 @@ func TestQuotes(t *testing.T) {
 
 func TestDashes(t *testing.T) {
 	tests := []struct{ in, want string }{
-		{"em—dash", "em---dash"},          // — EM DASH
-		{"en–dash", "en--dash"},           // – EN DASH
+		{"em—dash", "em---dash"},     // — EM DASH
+		{"en–dash", "en--dash"},      // – EN DASH
 		{"fig‒dash", "fig-dash"},     // ‒ FIGURE DASH
 		{"nb‑hyphen", "nb-hyphen"},   // ‑ NON-BREAKING HYPHEN
 		{"a‐b", "a-b"},               // ‐ HYPHEN
