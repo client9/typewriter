@@ -6,7 +6,8 @@ import (
 	"unicode/utf8"
 )
 
-// Category is a bitfield grouping related character conversions.
+// Category is a bitmask that selects groups of character substitutions.
+// Combine groups with |; exclude a group from [Default] with &^.
 type Category uint
 
 const (
@@ -27,7 +28,8 @@ const (
 	CategoryAll = Default
 )
 
-// UnicodeStyle identifies a typographic Unicode style variant.
+// UnicodeStyle identifies a typographic Unicode style variant used in
+// mathematical notation and social-media text.
 type UnicodeStyle int
 
 const (
@@ -39,23 +41,34 @@ const (
 	Subscript                       // ₂₄  → 24
 )
 
-// RunStyle configures how a run of styled Unicode characters is converted.
-// The ASCII text of the run is wrapped with Prefix and Suffix.
-// Empty Prefix and Suffix strips the run to plain ASCII.
+// RunStyle configures how a contiguous run of styled Unicode characters is
+// converted. The recovered ASCII text is wrapped with Prefix and Suffix.
+// When both are empty the run is stripped to plain ASCII with no added markup.
 type RunStyle struct {
-	Style  UnicodeStyle
-	Prefix string
-	Suffix string
+	Style  UnicodeStyle // style variant to detect
+	Prefix string       // prepended to the recovered ASCII text
+	Suffix string       // appended to the recovered ASCII text
 }
 
-// Config configures a Replacer.
+// Config configures a [Replacer]. Pass as a value to [New].
 type Config struct {
+	// Categories selects which built-in conversion groups are active.
+	// Use [Default] to enable all groups.
 	Categories Category
-	Overrides  map[string]string // from → to; empty to = pass through unchanged
-	Runs       []RunStyle
+
+	// Overrides adjusts individual mappings before the built-in table is
+	// consulted. The key is the Unicode source string; the value is the ASCII
+	// target. An empty value suppresses the built-in mapping for that key.
+	Overrides map[string]string
+
+	// Runs configures detection of contiguous Unicode-styled character runs
+	// (bold, italic, monospace, etc.) and the Prefix/Suffix used to wrap
+	// the recovered ASCII text. See [RunStyle].
+	Runs []RunStyle
 }
 
-// Replacer applies typographic-to-ASCII conversions. Create with New.
+// Replacer applies typographic-to-ASCII conversions configured by [New].
+// A Replacer is safe for concurrent use by multiple goroutines.
 type Replacer struct {
 	sr     *strings.Replacer
 	runs   []RunStyle
@@ -66,7 +79,7 @@ var defaultReplacer = sync.OnceValue(func() *Replacer {
 	return New(Config{Categories: Default})
 })
 
-// New creates a Replacer from cfg.
+// New returns a Replacer configured by cfg.
 func New(cfg Config) *Replacer {
 	return &Replacer{
 		sr:     buildReplacer(cfg.Categories, cfg.Overrides),

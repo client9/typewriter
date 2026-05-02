@@ -11,7 +11,7 @@ to plain text — optionally wrapping runs with configurable markup.
 - Uses only stdlib, no dependencies
 - Safe for concurrent use
 - For a goldmark extension see [goldmark-typewriter](https://github.com/client9/goldmark-typewriter).
-- For emoticon/emoji/shortcut conversion see [demoji](https://github.com/client9/demoji).
+- For emoticon/emoji/shortcode conversion see [demoji](https://github.com/client9/demoji).
 
 ## Installation
 

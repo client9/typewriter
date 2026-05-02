@@ -15,8 +15,8 @@ type styleRange struct {
 	count        int
 }
 
-// These cover the sans-serif mathematical variants, which are the most common
-// in copy-pasted social-media and AI-generated content.
+// styleRanges covers the sans-serif mathematical variants, which are the most
+// common in copy-pasted social-media and AI-generated content.
 var styleRanges = []styleRange{
 	// Bold sans-serif
 	{Bold, 0x1D5D4, 'A', 26}, // 𝗔–𝗭
