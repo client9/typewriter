@@ -55,7 +55,7 @@ All categories are active by default.
 | Dashes | em dash `—`, en dash `–`, minus `−` | `---` `--` `-` |
 | Ellipsis | `…` | `...` |
 | Fractions | `½` `¼` `¾` `⅓` `⅛` | `1/2` `1/4` `3/4` `1/3` `1/8` |
-| Symbols | `©` `®` `™` | `(c)` `(r)` `(tm)` |
+| Symbols | `©` `®` `™` `§` `¶` | `(c)` `(r)` `(tm)` `S.` `P.` |
 | Math | `×` `÷` `≠` `≤` `≥` `→` | `x` `/` `!=` `<=` `>=` `->` |
 | Ligatures | `ﬁ` `ﬂ` `ﬀ` `ﬃ` | `fi` `fl` `ff` `ffi` |
 | Bullets | `•` `†` → `*` &nbsp; `‡` → `**` &nbsp; `·` → `.` | `*` `**` `.` |

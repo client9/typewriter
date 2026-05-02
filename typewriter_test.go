@@ -215,8 +215,11 @@ const boldHello = "\U0001d5db\U0001d5f2\U0001d5f9\U0001d5f9\U0001d5fc"
 // italicWorld = 𝘸𝘰𝘳𝘭𝘥  (sans-serif italic)
 const italicWorld = "\U0001d638\U0001d630\U0001d633\U0001d62d\U0001d625"
 
-// boldWorld = 𝘄𝗼𝗿𝗹𝗱  (sans-serif bold)
+// boldWorld = "world" in sans-serif bold (U+1D604..U+1D5F1); may render italic in some fonts
 const boldWorld = "\U0001d604\U0001d5fc\U0001d5ff\U0001d5f9\U0001d5f1"
+
+// boldItalicHi = 𝙃𝙞  (sans-serif bold-italic, U+1D643 = sans-serif bold-italic 'H')
+const boldItalicHi = "\U0001d643\U0001d666"
 
 func TestRunsBoldStrip(t *testing.T) {
 	// No prefix/suffix: strip to plain ASCII.
@@ -271,6 +274,31 @@ func TestRunsSubscript(t *testing.T) {
 	got := r.Replace("H₂O")
 	if got != "H2O" {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestRunsUnconfiguredStylePassthrough(t *testing.T) {
+	// BoldItalic is not in Runs; those runes should survive unchanged.
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default,
+		Runs:       []typewriter.RunStyle{{Style: typewriter.Bold, Prefix: "**", Suffix: "**"}},
+	})
+	got := r.Replace(boldItalicHi)
+	if got != boldItalicHi {
+		t.Errorf("got %q, want original %q", got, boldItalicHi)
+	}
+}
+
+func TestRunsEmptyAndASCII(t *testing.T) {
+	r := typewriter.New(typewriter.Config{
+		Categories: typewriter.Default,
+		Runs:       []typewriter.RunStyle{{Style: typewriter.Bold, Prefix: "**", Suffix: "**"}},
+	})
+	if got := r.Replace(""); got != "" {
+		t.Errorf("empty: got %q", got)
+	}
+	if got := r.Replace("hello world"); got != "hello world" {
+		t.Errorf("plain ASCII: got %q", got)
 	}
 }
 

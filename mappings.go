@@ -78,7 +78,7 @@ var builtinMappings = []mapping{
 	{Math, "→", `->`},  // → RIGHTWARDS ARROW
 	{Math, "←", `<-`},  // ← LEFTWARDS ARROW
 	{Math, "⇒", `=>`},  // ⇒ RIGHTWARDS DOUBLE ARROW
-	{Math, "⇐", `<=`},  // ⇐ LEFTWARDS DOUBLE ARROW
+	{Math, "⇐", `<==`}, // ⇐ LEFTWARDS DOUBLE ARROW (<= would collide with ≤)
 
 	// Ligatures — typographic ligatures → component letters
 	{Ligatures, "ﬃ", `ffi`}, // ﬃ LATIN SMALL LIGATURE FFI (longest first)

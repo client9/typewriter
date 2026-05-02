@@ -30,22 +30,28 @@ const (
 
 // UnicodeStyle identifies a typographic Unicode style variant used in
 // mathematical notation and social-media text.
+//
+// The zero value is StyleUnknown. Callers must set Style explicitly when
+// constructing a [RunStyle]; a zero-value RunStyle{} has no defined style.
 type UnicodeStyle int
 
 const (
-	Bold        UnicodeStyle = iota // 𝗔𝗕𝗖 → ABC
-	Italic                          // 𝘈𝘉𝘊 → ABC
-	BoldItalic                      // 𝘼𝘽𝘾 → ABC
-	Monospace                       // 𝙰𝙱𝙲 → ABC
-	Superscript                     // ²⁴  → 24
-	Subscript                       // ₂₄  → 24
+	StyleUnknown UnicodeStyle = iota // zero value — not a valid style
+	Bold                             // 𝗔𝗕𝗖 → ABC
+	Italic                           // 𝘈𝘉𝘊 → ABC
+	BoldItalic                       // 𝘼𝘽𝘾 → ABC
+	Monospace                        // 𝙰𝙱𝙲 → ABC
+	Superscript                      // ²⁴  → 24
+	Subscript                        // ₂₄  → 24
 )
 
 // RunStyle configures how a contiguous run of styled Unicode characters is
 // converted. The recovered ASCII text is wrapped with Prefix and Suffix.
 // When both are empty the run is stripped to plain ASCII with no added markup.
+//
+// Style must be set explicitly; [StyleUnknown] (zero value) matches nothing.
 type RunStyle struct {
-	Style  UnicodeStyle // style variant to detect
+	Style  UnicodeStyle // style variant to detect; must not be StyleUnknown
 	Prefix string       // prepended to the recovered ASCII text
 	Suffix string       // appended to the recovered ASCII text
 }
@@ -108,6 +114,9 @@ func (r *Replacer) replaceWithRuns(s string) string {
 
 	for i := 0; i < len(s); {
 		ru, size := utf8.DecodeRuneInString(s[i:])
+		// utf8.RuneError with size==1 means invalid UTF-8; it won't be in
+		// lookup so it falls through to the strings.Replacer segment below,
+		// which handles arbitrary byte sequences safely.
 		sr, ok := r.lookup[ru]
 		if !ok {
 			i += size
