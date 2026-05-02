@@ -1,24 +1,3 @@
-// Package typewriter converts typographic ("smart") Unicode characters back to
-// plain ASCII and normalises Unicode style variants back to plain letters.
-//
-// It handles curly and angle quotes, em/en dashes, ellipsis, ligatures,
-// fractions, common symbols, math operators, non-breaking spaces, and
-// sans-serif bold/italic/monospace/superscript/subscript variants that appear
-// in copy-pasted social-media and AI-generated text.
-//
-// Basic usage with defaults (all categories enabled):
-//
-//	out := typewriter.Replace("“Hello” — wait…")
-//	// out == `"Hello" --- wait...`
-//
-// For custom configuration, construct a [Replacer] via [New]:
-//
-//	r := typewriter.New(typewriter.Config{
-//	    Categories: typewriter.Default,
-//	    Runs: []typewriter.RunStyle{
-//	        {Style: typewriter.Bold, Prefix: "**", Suffix: "**"},
-//	    },
-//	})
 package typewriter
 
 import (
