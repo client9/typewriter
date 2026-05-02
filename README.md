@@ -7,26 +7,37 @@ Converts typographic ("smart") Unicode characters back to their plain ASCII equi
 and normalises Unicode style variants (bold, italic, monospace, superscript, subscript)
 to plain text — optionally wrapping runs with configurable markup.
 
-Zero dependencies. For a goldmark extension see
+Zero dependencies. Requires Go 1.22+. For a goldmark extension see
 [goldmark-typewriter](https://github.com/client9/goldmark-typewriter).
 
+## Installation
+
+```
+go get github.com/client9/typewriter
+```
+
 ## Quick start
+
+Package-level functions use all [Default] categories and require no configuration:
 
 ```go
 import "github.com/client9/typewriter"
 
-// Package-level convenience — all Default categories.
-clean := typewriter.Replace(s)
-clean := typewriter.ReplaceBytes(b)
+clean := typewriter.Replace(s)       // string → string
+cleanB := typewriter.ReplaceBytes(b) // []byte → []byte
+```
 
-// Configured instance.
+For custom behaviour, create a [Replacer] with [New]. It is safe for concurrent
+use and should be built once and reused:
+
+```go
 r := typewriter.New(typewriter.Config{
     Categories: typewriter.Default,
     Runs: []typewriter.RunStyle{
         {Style: typewriter.Bold, Prefix: "**", Suffix: "**"},
     },
 })
-clean = r.Replace(s)
+clean := r.Replace(s)
 ```
 
 ## What it converts
@@ -44,7 +55,7 @@ All categories are active by default.
 | Symbols | `©` `®` `™` | `(c)` `(r)` `(tm)` |
 | Math | `×` `÷` `≠` `≤` `≥` `→` | `x` `/` `!=` `<=` `>=` `->` |
 | Ligatures | `ﬁ` `ﬂ` `ﬀ` `ﬃ` | `fi` `fl` `ff` `ffi` |
-| Bullets | `•` `†` `‡` | `*` `*` `**` |
+| Bullets | `•` `†` → `*` &nbsp; `‡` → `**` &nbsp; `·` → `.` | `*` `**` `.` |
 | Spaces | NBSP, thin, en, em, figure, hair, U+2028, U+2029 | plain space |
 
 ### Unicode style variants (run-based)
@@ -65,21 +76,10 @@ Style variants are not active by default — configure with `Config.Runs`.
 
 ## Configuration
 
-### Config struct
-
-```go
-type Config struct {
-    Categories Category
-    Overrides  map[string]string // from → to; empty to = pass through unchanged
-    Runs       []RunStyle
-}
-
-type RunStyle struct {
-    Style  UnicodeStyle
-    Prefix string
-    Suffix string
-}
-```
+`Config` has three fields: `Categories` selects which built-in conversion groups are
+active; `Overrides` adds, changes, or excludes individual character mappings; `Runs`
+configures Unicode style run detection. `RunStyle.Prefix` and `RunStyle.Suffix` wrap
+each detected run — leave them empty to strip styled characters to plain ASCII.
 
 ### Enable only specific categories
 
@@ -152,17 +152,22 @@ r := typewriter.New(typewriter.Config{
 })
 ```
 
-## Normalising before smart typography
+## Normalising before Goldmark's Typographer
 
+[Goldmark](https://github.com/yuin/goldmark)'s
+[Typographer extension](https://github.com/yuin/goldmark?tab=readme-ov-file#typographer)
+converts ASCII punctuation to smart Unicode characters (`--` → `–`, `"..."` → `"…"`, etc.).
 Markdown from mixed sources (hand-authored, Word, AI-generated) arrives with
-inconsistent typography. A typographer pass on mixed input produces inconsistent output:
+inconsistent typography, so a Typographer pass produces inconsistent output:
 content already containing `"Hello"` passes through unchanged while `"Hello"` gets
 converted.
 
-The fix is to strip to a clean ASCII baseline first:
+The fix is to strip everything to a clean ASCII baseline with typewriter first:
 
 ```go
 import (
+    "log"
+
     "github.com/client9/typewriter"
     "github.com/yuin/goldmark"
     "github.com/yuin/goldmark/extension"
@@ -171,10 +176,12 @@ import (
 clean := typewriter.ReplaceBytes(src)
 
 md := goldmark.New(goldmark.WithExtensions(extension.Typographer))
-md.Convert(clean, &buf)
+if err := md.Convert(clean, &buf); err != nil {
+    log.Fatal(err)
+}
 ```
 
-For goldmark integration (converting typographic characters inside an AST walk) see
+For direct [Goldmark](https://github.com/yuin/goldmark) integration see
 [goldmark-typewriter](https://github.com/client9/goldmark-typewriter).
 
 ## License
