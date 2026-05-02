@@ -1,21 +1,3 @@
-// Package typewriter converts typographic ("smart") Unicode characters back to
-// their plain ASCII typewriter equivalents, and strips Unicode style variants
-// (bold, italic, monospace, etc.) back to plain letters.
-//
-// Use package-level functions for the common case:
-//
-//	clean := typewriter.Replace(s)
-//	clean := typewriter.ReplaceBytes(b)
-//
-// Configure with a Config struct:
-//
-//	r := typewriter.New(typewriter.Config{
-//	    Categories: typewriter.Default,
-//	    Runs: []typewriter.RunStyle{
-//	        {Style: typewriter.Bold, Prefix: "**", Suffix: "**"},
-//	    },
-//	})
-//	clean := r.Replace(s)
 package typewriter
 
 import (
