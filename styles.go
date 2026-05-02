@@ -63,7 +63,11 @@ var superscriptRunes = [...]struct {
 // allStyledRunes is the complete lookup for all defined Unicode styles,
 // built once at package initialisation.
 var allStyledRunes = func() map[rune]styledRune {
-	m := make(map[rune]styledRune, 200)
+	total := len(superscriptRunes)
+	for _, sr := range styleRanges {
+		total += sr.count
+	}
+	m := make(map[rune]styledRune, total)
 	for _, sr := range styleRanges {
 		for i := range sr.count {
 			m[sr.unicodeStart+rune(i)] = styledRune{
@@ -84,13 +88,13 @@ func buildStyleLookup(runs []RunStyle) map[rune]styledRune {
 	if len(runs) == 0 {
 		return nil
 	}
-	active := make(map[UnicodeStyle]bool, len(runs))
+	active := make(map[UnicodeStyle]struct{}, len(runs))
 	for _, rs := range runs {
-		active[rs.Style] = true
+		active[rs.Style] = struct{}{}
 	}
-	m := make(map[rune]styledRune)
+	m := make(map[rune]styledRune, len(allStyledRunes))
 	for r, sr := range allStyledRunes {
-		if active[sr.style] {
+		if _, ok := active[sr.style]; ok {
 			m[r] = sr
 		}
 	}

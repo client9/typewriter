@@ -162,19 +162,18 @@ func ReplaceBytes(b []byte) []byte { return defaultReplacer().ReplaceBytes(b) }
 
 func buildReplacer(cats Category, overrides map[string]string) *strings.Replacer {
 	args := make([]string, 0, len(builtinMappings)*2)
-	seen := make(map[string]bool, len(overrides)+len(builtinMappings))
+	blocked := make(map[string]bool, len(overrides))
 
 	for from, to := range overrides {
-		seen[from] = true
+		blocked[from] = true
 		if to != "" {
 			args = append(args, from, to)
 		}
 	}
 	for _, m := range builtinMappings {
-		if cats&m.cat == 0 || seen[m.from] {
+		if cats&m.cat == 0 || blocked[m.from] {
 			continue
 		}
-		seen[m.from] = true
 		args = append(args, m.from, m.to)
 	}
 	return strings.NewReplacer(args...)
