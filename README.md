@@ -1,4 +1,7 @@
 # typewriter
+[![Go Reference](https://pkg.go.dev/badge/github.com/client9/typewriter.svg)](https://pkg.go.dev/github.com/client9/typewriter)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://github.com/client9/typewriter/actions/workflows/go.yml/badge.svg)](https://github.com/client9/typewriter/actions)
 
 Converts typographic ("smart") Unicode characters back to their plain ASCII equivalents,
 and normalises Unicode style variants (bold, italic, monospace, superscript, subscript)
@@ -12,7 +15,7 @@ Zero dependencies. For a goldmark extension see
 ```go
 import "github.com/client9/typewriter"
 
-// Package-level convenience — all Default categories, no style conversion.
+// Package-level convenience — all Default categories.
 clean := typewriter.Replace(s)
 clean := typewriter.ReplaceBytes(b)
 
@@ -173,3 +176,8 @@ md.Convert(clean, &buf)
 
 For goldmark integration (converting typographic characters inside an AST walk) see
 [goldmark-typewriter](https://github.com/client9/goldmark-typewriter).
+
+## License
+
+[MIT](/LICENSE.md)
+
