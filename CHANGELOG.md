@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- reorder fields in structs to reduce memory using [betteralign](https://github.com/dkorunic/betteralign/).
+
 ## [1.0.0] - 2026-06-12
 
 ### Added

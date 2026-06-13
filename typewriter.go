@@ -53,16 +53,13 @@ const (
 // If the same Style value appears more than once in [Config.Runs], only the
 // first occurrence is used; subsequent duplicates are silently ignored.
 type RunStyle struct {
-	Style  UnicodeStyle // style variant to detect; must not be StyleUnknown
 	Prefix string       // prepended to the recovered ASCII text
 	Suffix string       // appended to the recovered ASCII text
+	Style  UnicodeStyle // style variant to detect; must not be StyleUnknown
 }
 
 // Config configures a [Replacer]. Pass as a value to [New].
 type Config struct {
-	// Categories selects which built-in conversion groups are active.
-	// Use [Default] to enable all groups.
-	Categories Category
 
 	// Overrides adjusts individual mappings before the built-in table is
 	// consulted. The key is the Unicode source string; the value is the ASCII
@@ -73,14 +70,17 @@ type Config struct {
 	// (bold, italic, monospace, etc.) and the Prefix/Suffix used to wrap
 	// the recovered ASCII text. See [RunStyle].
 	Runs []RunStyle
+	// Categories selects which built-in conversion groups are active.
+	// Use [Default] to enable all groups.
+	Categories Category
 }
 
 // Replacer applies typographic-to-ASCII conversions configured by [New].
 // A Replacer is safe for concurrent use by multiple goroutines.
 type Replacer struct {
 	sr     *strings.Replacer
-	runs   []RunStyle
 	lookup map[rune]styledRune
+	runs   []RunStyle
 }
 
 var defaultReplacer = sync.OnceValue(func() *Replacer {
